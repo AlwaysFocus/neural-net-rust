@@ -1,46 +1,54 @@
 mod neuron;
 mod network;
+mod load_dataset;
 
 use network::Network;
+use rand::seq::SliceRandom;
+use crate::neuron::ActivationFunction;
+use crate::load_dataset::load_titanic_dataset;
 
 fn main() {
-    // Define the number of input features and hidden neurons
-    let num_inputs = 2;
-    let num_hidden = 3;
-    
-    // Create a network instance with the specified architecture
-    let network = Network::new(num_inputs, num_hidden);
-    
-    // Define the input values for prediction
-    let inputs = &[0.5, 0.8];
-    
-    // Feed the inputs through the network and get the final output
-    let output = network.predict(inputs);
-    
-    // Print the structure of the neural network
-    println!("Neural Network Structure:");
-    println!("Input layer: {} neurons", network.input_neurons.len());
-    println!("Hidden layer: {} neurons", network.hidden_neurons.len());
-    println!("Output layer: 1 neuron");
-    
-    // Input values
-    println!("\nInput values: {:?}", inputs);
-    
-    // Activations of the input layer neurons
-    println!("\nInput Layer Activations:");
-    for (i, neuron) in network.input_neurons.iter().enumerate() {
-        println!("Neuron {}: {:.4}", i + 1, neuron.activate(&[inputs[i]]));
+    // Load and preprocess the Titanic dataset
+    let file_path = "data/titanic.csv";
+    let (features, targets) = load_titanic_dataset(file_path);
+
+    // Split the data into training and testing sets
+    let test_size = 0.2;
+    let test_count = (features.len() as f64 * test_size) as usize;
+    let mut indices: Vec<usize> = (0..features.len()).collect();
+    indices.shuffle(&mut rand::thread_rng());
+    let test_indices = &indices[..test_count];
+    let train_indices = &indices[test_count..];
+
+    let train_features: Vec<&Vec<f64>> = train_indices.iter().map(|&i| &features[i]).collect();
+    let train_targets: Vec<&f64> = train_indices.iter().map(|&i| &targets[i]).collect();
+    let test_features: Vec<&Vec<f64>> = test_indices.iter().map(|&i| &features[i]).collect();
+    let test_targets: Vec<&f64> = test_indices.iter().map(|&i| &targets[i]).collect();
+
+    // Create and train the neural network
+    let num_epochs = 100;
+    let learning_rate = 0.01;
+    let layer_sizes = &[7, 10, 5, 1];
+    let activation_fn = ActivationFunction::Sigmoid;
+    let mut network = Network::new(layer_sizes, activation_fn);
+
+    for epoch in 0..num_epochs {
+        for (inputs, &&target) in train_features.iter().zip(&train_targets) {
+            network.train(inputs, &[target], learning_rate);
+        }
+        println!("Epoch {}/{} completed", epoch + 1, num_epochs);
     }
-    
-    // Activations of the hidden layer neurons
-    println!("\nHidden Layer Activations:");
-    for (i, neuron) in network.hidden_neurons.iter().enumerate() {
-        let activation = neuron.activate(inputs);
-        println!("Neuron {}: {:.4}", i + 1, activation);
+
+    // Evaluate the trained model on the testing set
+    let mut correct_predictions = 0;
+    for (inputs, &target) in test_features.iter().zip(&test_targets) {
+        let prediction = network.predict(inputs)[0];
+        let predicted_class = if prediction >= 0.5 { 1.0 } else { 0.0 };
+        if predicted_class == *target {
+            correct_predictions += 1;
+        }
     }
-    
-    // Activation of output neuron
-    println!("\nOutput Layer Activation:");
-    println!("Output Neuron: {:.4}", output);
-    
+
+    let accuracy = correct_predictions as f64 / test_features.len() as f64;
+    println!("Accuracy on the testing set: {:.2}%", accuracy * 100.0);
 }
